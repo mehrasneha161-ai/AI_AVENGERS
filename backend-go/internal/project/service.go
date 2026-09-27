@@ -75,8 +75,10 @@ func NewService(db *pgxpool.Pool, logger *zap.Logger) *Service {
 func (s *Service) Create(ctx context.Context, clientID uuid.UUID, req CreateProjectRequest) (*Project, error) {
 	var p Project
 	err := s.db.QueryRow(ctx,
-		`INSERT INTO projects (client_id, name, description)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO projects (client_id, name, description, tenant_id)
+		 VALUES ($1, $2, $3,
+		         COALESCE((SELECT tenant_id FROM users WHERE id = $1),
+		                  (SELECT id FROM tenants WHERE slug = 'default')))
 		 RETURNING id, client_id, name, COALESCE(description,''), status,
 		           COALESCE(repo_url,''), COALESCE(repo_provider,''),
 		           COALESCE(repo_branch,'main'), repo_connected, created_at, updated_at`,
