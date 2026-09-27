@@ -162,11 +162,16 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*Token
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Insert user
+	// Insert user — joined to the default tenant.
+	// WHY: migration 030 (C4 tenant isolation) fails closed on users.tenant_id
+	// NULL, so a self-registered user with no tenant would get 403 on every
+	// tenant-scoped route (/experts, /search/chats, message send). Admin-created
+	// accounts were backfilled to the default tenant by that migration; self-
+	// registration must do the same or the mobile app can never see an expert.
 	var userID uuid.UUID
 	err = s.db.QueryRow(ctx,
-		`INSERT INTO users (email, hashed_password, full_name, role)
-		 VALUES ($1, $2, $3, 'client')
+		`INSERT INTO users (email, hashed_password, full_name, role, tenant_id)
+		 VALUES ($1, $2, $3, 'client', (SELECT id FROM tenants WHERE slug = 'default'))
 		 RETURNING id`,
 		req.Email, string(hashed), req.FullName,
 	).Scan(&userID)
